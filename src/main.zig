@@ -1,17 +1,23 @@
 const std = @import("std");
+const lexer = @import("lexer.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    const allocator = gpa.allocator();
     defer _ = gpa.deinit();
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const allocator = gpa.allocator();
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+    
+    const args = try std.process.argsAlloc(arenaAllocator);
+    defer std.process.argsFree(arenaAllocator, args);
     if (args.len > 2){
         std.debug.print("Usage: ./zlox_twi <file.lox>. You can omit the file name in you wanna run a REPL", .{});
     }else if (args.len == 2){
-        try runFile(allocator, args[1]);
+        try runFile(arenaAllocator, args[1]);
     }else{
-        try runREPL(allocator);
+        try runREPL(arenaAllocator);
     }
 }
 
@@ -19,7 +25,7 @@ fn runFile(allocator: std.mem.Allocator, filePath: []const u8) !void{
     const cwd = std.fs.cwd();
     const source = try cwd.readFileAlloc(allocator, filePath, std.math.maxInt(usize));
     defer allocator.free(source);
-    try run(source);
+    try run(source, allocator);
 }
 
 fn runREPL(allocator: std.mem.Allocator) !void{
@@ -33,10 +39,10 @@ fn runREPL(allocator: std.mem.Allocator) !void{
     std.debug.print("> ",.{});
     while (stdinIoReader.streamDelimiter(&allocatingWriter.writer, '\n')) |_|{
         const source = allocatingWriter.written();
-        try run(source);
+        try run(source, allocator);
         allocatingWriter.clearRetainingCapacity();
         stdinIoReader.toss(1);
-        std.debug.print("> ",.{});
+        std.debug.print("\n> ",.{});
     }else |err|{
         switch (err){
             error.EndOfStream => {
@@ -48,6 +54,12 @@ fn runREPL(allocator: std.mem.Allocator) !void{
     }
 }
 
-fn run(source: []u8) !void{
-    std.debug.print("{s}\n", .{source});
+fn run(source: []u8, allocator: std.mem.Allocator) !void{
+    var scanner = lexer.Scanner{
+        .allocator = allocator
+    };
+    try scanner.scan(source);
+    for (scanner.tokens.items) |token|{
+        std.debug.print("{s},",.{try token.*.toString(scanner.allocator)});
+    }
 }
