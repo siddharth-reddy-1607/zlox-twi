@@ -1,23 +1,20 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
+const parser = @import("parser.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    defer _ = gpa.deinit();
+    defer _ = gpa.detectLeaks();
     const allocator = gpa.allocator();
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-    
-    const args = try std.process.argsAlloc(arenaAllocator);
-    defer std.process.argsFree(arenaAllocator, args);
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
     if (args.len > 2){
         std.debug.print("Usage: ./zlox_twi <file.lox>. You can omit the file name in you wanna run a REPL", .{});
     }else if (args.len == 2){
-        try runFile(arenaAllocator, args[1]);
+        try runFile(allocator, args[1]);
     }else{
-        try runREPL(arenaAllocator);
+        try runREPL(allocator);
     }
 }
 
@@ -55,11 +52,15 @@ fn runREPL(allocator: std.mem.Allocator) !void{
 }
 
 fn run(source: []u8, allocator: std.mem.Allocator) !void{
-    var scanner = lexer.Scanner{
-        .allocator = allocator
-    };
-    try scanner.scan(source);
-    for (scanner.tokens.items) |token|{
-        std.debug.print("{s},",.{try token.*.toString(scanner.allocator)});
+    var s = try lexer.Scanner.init(allocator);
+    defer s.deinit();
+    try s.scan(source);
+    for (s.tokens.items) |token|{
+        std.debug.print("{s},",.{try token.*.toString(s.arena)});
     }
+    std.debug.print("\n",.{});
+    var p = try parser.Parser.init(allocator, &s.tokens);
+    defer p.deinit();
+    const ast = try p.parse();
+    parser.prettyPrint(ast);
 }

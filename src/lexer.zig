@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const TokenType = enum{
+pub const TokenType = enum{
     LEFT_PAREN, RIGHT_PAREN, LEFT_CURLY_PAREN, RIGHT_CURLY_PAREN,
     PLUS, MINUS, STAR,
     DOT, COMMA, SEMICOLON,
@@ -38,12 +38,12 @@ const keywordMap = std.static_string_map.StaticStringMap(TokenType).initComptime
     .{"super", .SUPER},
 });
 
-const Literal = union(enum){
+pub const Literal = union(enum){
     number : f64,
     string : []const u8,
 };
 
-const Token = struct{
+pub const Token = struct{
     const Self = @This();
 
     type : TokenType,
@@ -52,15 +52,15 @@ const Token = struct{
     line : usize,
     offset : usize,
 
-    pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8{
+    pub fn toString(self: Self, arena: *std.heap.ArenaAllocator) ![]const u8{
         var ret : []const u8 = undefined;
         if (self.literal) |lit|{
             switch (lit) {
-                .string => |l| ret = try std.fmt.allocPrint(allocator,"{s} [{any}] [{s}]", .{self.lexeme, self.type, l}),
-                .number => |l| ret = try std.fmt.allocPrint(allocator,"{s} [{any}] [{any}]", .{self.lexeme, self.type, l}),
+                .string => |l| ret = try std.fmt.allocPrint(arena.allocator(),"{s} [{any}] [{s}]", .{self.lexeme, self.type, l}),
+                .number => |l| ret = try std.fmt.allocPrint(arena.allocator(),"{s} [{any}] [{any}]", .{self.lexeme, self.type, l}),
             }
         }else{
-            ret = try std.fmt.allocPrint(allocator,"{s} [{any}] [null]", .{self.lexeme, self.type});
+            ret = try std.fmt.allocPrint(arena.allocator(),"{s} [{any}] [null]", .{self.lexeme, self.type});
         }
         return ret;
     }
@@ -73,7 +73,22 @@ pub const Scanner = struct{
     current : usize = 0,
     line : usize = 0,
     source : ?[]const u8 = null,
-    allocator : std.mem.Allocator,
+    arena : *std.heap.ArenaAllocator,
+
+    pub fn init(allocator: std.mem.Allocator) !Scanner{
+        const arena = try allocator.create(std.heap.ArenaAllocator);
+        errdefer allocator.destroy(arena);
+        arena.* = std.heap.ArenaAllocator.init(allocator);
+        return .{
+            .arena = arena,
+        };
+    }
+
+    pub fn deinit(self: Self) void{
+        const parentAllocator = self.arena.child_allocator;
+        self.arena.deinit();
+        parentAllocator.destroy(self.arena);
+    }
     
     pub fn scan(self: *Self, source: []const u8) !void{
         self.source = source;
@@ -111,23 +126,24 @@ pub const Scanner = struct{
                 '"' => try self.addString(),
                 '0'...'9' => try self.addNumber(),
                 '_','a'...'z','A'...'Z' => try self.addIdentifier(),
-                //TODO: Better error handling via an interface?
+                //TODO: Use error sets and gracefully handle errors
                 else => {return error.UnknownToken;},
             }
         }
+        try self.addToken(.EOF);
     }
 
     fn addToken(self: *Self, tokenType : TokenType) !void{
-        const lexeme = try self.allocator.alloc(u8, self.current - self.start);
+        const lexeme = try self.arena.allocator().alloc(u8, self.current - self.start);
         @memcpy(lexeme, self.source.?[self.start..self.current]);
-        const token = try self.allocator.create(Token);
+        const token = try self.arena.allocator().create(Token);
         token.lexeme = lexeme;
         token.line = self.line;
         token.offset = self.start;
         token.type = tokenType;
         switch (tokenType){
             .STRING => {
-                const literal = try self.allocator.alloc(u8, (self.current - 1) - (self.start + 1)); // Strip opening and closing double quotes
+                const literal = try self.arena.allocator().alloc(u8, (self.current - 1) - (self.start + 1)); // Strip opening and closing double quotes
                 @memcpy(literal, self.source.?[self.start+1..self.current-1]);
                 token.literal.? = .{.string = literal};
             },
@@ -139,11 +155,11 @@ pub const Scanner = struct{
                 token.literal = null;
             }
         }
-        try self.tokens.append(self.allocator, token);
+        try self.tokens.append(self.arena.allocator(), token);
     }
 
     fn addNumber(self: *Self) !void{
-        //TODO: Check if we infact delegate there errors to the parser
+        //TODO: Check if we infact delegate these errors to the parser
         //What about 123. or 123abc => We treat them as two seperate token (123,DOT) and (123,IDENTIFIER) and we delegate these errors to the parser
         //Since spaces don't matter in lox
         while (self.isDigit(self.peek() orelse null)){
