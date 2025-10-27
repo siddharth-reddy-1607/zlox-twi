@@ -1,6 +1,7 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
+const eval = @import("eval.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -63,4 +64,10 @@ fn run(source: []u8, allocator: std.mem.Allocator) !void{
     defer p.deinit();
     const ast = try p.parse();
     parser.prettyPrint(ast);
+    std.debug.print("\n",.{});
+    const evaluator = try eval.Evalutor.init(allocator);
+    defer evaluator.deinit();
+    const val = try evaluator.eval(ast);
+    eval.prettyPrint(val);
+
 }

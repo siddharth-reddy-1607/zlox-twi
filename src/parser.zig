@@ -27,7 +27,7 @@ const binaryStruct = struct{
     rightOperand : *Expr,
 };
 
-const Expr = union(enum){
+pub const Expr = union(enum){
     Literal : union(enum){
         number : f64,
         string : []const u8,
@@ -155,7 +155,7 @@ pub const Parser = struct{
     fn unary(self: *Self) !*Expr{
         if (self.match(&.{.MINUS,.BANG})){
             const operator = self.previous();
-            var operand = try self.unary();
+            const operand = try self.unary();
             const unaryExpr = try self.arena.allocator().create(unaryStruct);
             unaryExpr.* = .{
                 .operand = operand, 
@@ -165,7 +165,7 @@ pub const Parser = struct{
             expr.* = .{
                 .Unary = unaryExpr
             };
-            operand = expr;
+            return expr;
         }
         return self.primary();
     }
@@ -237,7 +237,7 @@ pub fn prettyPrint(expr: *Expr) void{
                 .string => |string| std.debug.print("{s}", .{string}),
                 .true => |boolean| std.debug.print("{any}", .{boolean}),
                 .false => |boolean| std.debug.print("{any}", .{boolean}),
-                .nil => |nil| std.debug.print("{any}", .{nil.?}),
+                .nil =>  std.debug.print("nil", .{}),
             }
         }, 
         .Binary => |binary|{
