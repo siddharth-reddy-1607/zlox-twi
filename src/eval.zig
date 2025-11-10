@@ -1,8 +1,9 @@
 const std = @import("std");
 const parser = @import("parser.zig");
 const lexer = @import("lexer.zig");
+const environment = @import("environment.zig");
 
-const Value = union(enum){
+pub const Value = union(enum){
     number: f64,
     boolean: bool,
     string: []const u8,
@@ -16,25 +17,41 @@ const Value = union(enum){
 pub const Evalutor = struct{
     const Self = @This();
     arena: *std.heap.ArenaAllocator,
+    env: *environment.Environment,
 
     pub fn init(allocator: std.mem.Allocator) !Evalutor{
        const arena = try allocator.create(std.heap.ArenaAllocator);
+       const env = try allocator.create(environment.Environment);
        errdefer(allocator.destroy(arena));
+       errdefer(allocator.destroy(env));
        arena.* = std.heap.ArenaAllocator.init(allocator);
+       env.* = try environment.Environment.init(allocator);
        return Evalutor{
            .arena = arena,
+           .env = env,
        };
     }
     
     pub fn deinit(self: Self) void{
+        self.env.deinit();
         const parentAllocator = self.arena.child_allocator;
         self.arena.deinit();
         parentAllocator.destroy(self.arena);
+        parentAllocator.destroy(self.env);
     }
 
     pub fn eval(self: Self, statements: std.ArrayList(*parser.Stmt)) !void{
         for (statements.items) |stmt|{
             switch (stmt.*){
+                .varDecl => |varDecl|{
+                    var val = try self.arena.allocator().create(Value);
+                    if (varDecl.expr) |expr|{
+                        val = try self.evalExpression(expr);
+                    }else{
+                        val.* = .{.nil = null};
+                    }
+                    try self.env.create(varDecl.name, val);
+                },
                 .printStmt => |printStmt|{
                     const val = try self.evalExpression(printStmt);
                     prettyPrint(val);
@@ -52,8 +69,12 @@ pub const Evalutor = struct{
            .Literal => |l| {
                val = try self.arena.allocator().create(Value);
                switch(l){
+                   .identifier => |identifier| val = try self.env.get(identifier),
                    .number => |number| val.* = .{.number = number},
-                   .string => |string| val.* = .{.string = string},
+                   .string => |string| {
+                       const interpreterOwnedString = try self.arena.allocator().dupe(u8, string);
+                       val.* = .{.string = interpreterOwnedString};
+                   },
                    .true => val.* = .{.boolean = true},
                    .false => val.* = .{.boolean = false},
                    .nil => |nil| {

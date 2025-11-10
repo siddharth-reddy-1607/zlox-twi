@@ -5,10 +5,13 @@ const ParserError = error{
     ExpectedExpression,
     ExpectedClosingBrace,
     ExpectedSemicolon,
+    ExpectedIdentifier,
 } || std.mem.Allocator.Error;
 
 //Grammar Precedence
-// Program -> Statemtents* "EOF"
+// Program -> Declrations* EOF
+// Declaration -> VariableDeclaration | Statement;//This is just to distinguish between places that accept variable declarations and that don't. And if statement without scope for example can't have variable declaration
+// VariableDeclaration -> var IDENTIFIER ("=" expression)? ";"
 // Statement -> Print Statement | ExpressionStmt 
 // ExpressionStmt -> Expression ";"
 // PrintStatement -> "print" Expression ";"
@@ -18,13 +21,14 @@ const ParserError = error{
 // Term -> Factor (("+" | "-") Factor)*
 // Factor -> Unary (("/" | "*") Unary)*
 // Unary -> ("-" | "!")Unary | Primary
-// Primary -> (NUMBER | STRING | "true" | "false" | "nil")
+// Primary -> (NUMBER | STRING | IDENTIFIER | "true" | "false" | "nil")
 
-pub const Stmt = union(enum){
-    printStmt : *Expr,
-    exprStmt : *Expr,
-};
 //TODO: Make these anon structs with some metaprogramming?
+const variableDeclStruct = struct{
+    name: []const u8,
+    expr: ?*Expr,
+};
+
 const unaryStruct  = struct{
     operator : *lexer.Token,
     operand : *Expr,
@@ -36,6 +40,12 @@ const binaryStruct = struct{
     rightOperand : *Expr,
 };
 
+pub const Stmt = union(enum){
+    varDecl: *variableDeclStruct,
+    printStmt : *Expr,
+    exprStmt : *Expr,
+};
+
 pub const Expr = union(enum){
     Literal : union(enum){
         number : f64,
@@ -43,6 +53,7 @@ pub const Expr = union(enum){
         nil : ?bool, //This is always null.
         true : bool,
         false : bool,
+        identifier: []const u8,
     },
     // Unary : *struct{
     //     operator : *lexer.Token,
@@ -53,6 +64,7 @@ pub const Expr = union(enum){
     //     operator : *lexer.Token,
     //     rightOperand : *Expr,
     // },
+    //These don't have to optional
     Unary : ?*unaryStruct,
     Binary : ?*binaryStruct,
     Grouping : ?*Expr,
@@ -84,10 +96,35 @@ pub const Parser = struct{
         //TODO: Handle errors gracefully, synchronize
         var statements = std.ArrayList(*Stmt).empty;
         while (!self.match(&.{.EOF})){
-            const stmt = try self.statement();
+            const stmt = try self.declaration();
             try statements.append(self.arena.allocator(), stmt);
         }
         return statements;
+    }
+
+    fn declaration(self: *Self) !*Stmt{
+        if (self.match(&.{.VAR})){
+            if (!self.match(&.{.IDENTIFIER})){
+                return error.ExpectedIdentifier;
+            }
+            const identifer = self.previous().lexeme;
+            var expr :?*Expr = null;
+
+            const stmt = try self.arena.allocator().create(Stmt);
+            const variable = try self.arena.allocator().create(variableDeclStruct);
+            variable.name = identifer;
+
+            if (self.match(&.{.EQUALS})){
+                expr = try self.expression();
+            }
+            variable.expr = expr;
+            stmt.* = .{.varDecl = variable};
+            if (!self.match(&.{.SEMICOLON})){
+                return error.ExpectedSemicolon;
+            }
+            return stmt;
+        }
+        return self.statement();
     }
 
     fn statement(self: *Self) !*Stmt{
@@ -204,7 +241,7 @@ pub const Parser = struct{
     }
 
     fn primary(self: *Self) ParserError!*Expr{
-        if (self.match(&.{.NUMBER,.STRING,.TRUE,.FALSE,.NIL}) == true){
+        if (self.match(&.{.NUMBER,.STRING,.TRUE,.FALSE,.NIL,.IDENTIFIER}) == true){
             const expr = try self.arena.allocator().create(Expr);
             const token = self.previous();
             switch (token.type){
@@ -213,6 +250,7 @@ pub const Parser = struct{
                 .TRUE => expr.* = .{.Literal = .{.true = true}},
                 .FALSE => expr.* = .{.Literal = .{.false = false}},
                 .NIL => expr.* = .{.Literal = .{.nil = null}},
+                .IDENTIFIER => expr.* = .{.Literal = .{.identifier = token.lexeme}},
                 else => unreachable,
             }
             return expr;

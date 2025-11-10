@@ -1,0 +1,14 @@
+var a = "hello";
+
+print a + " sid";
+
+//Redeclaration allow for now
+var a = "new hello";
+print a;
+
+var b = 5 + (3 - 2)*5;
+var c = "sid" > "side";
+var d;
+print b;
+print c;
+print d;

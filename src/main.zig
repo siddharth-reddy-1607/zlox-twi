@@ -62,10 +62,10 @@ fn run(source: []u8, allocator: std.mem.Allocator, evaluator: eval.Evalutor) !vo
     var s = try lexer.Scanner.init(allocator);
     defer s.deinit();
     try s.scan(source);
-    for (s.tokens.items) |token|{
-        std.debug.print("{s},",.{try token.*.toString(s.arena)});
-    }
-    std.debug.print("\n",.{});
+    // for (s.tokens.items) |token|{
+    //     std.debug.print("{s},",.{try token.*.toString(s.arena)});
+    // }
+    // std.debug.print("\n",.{});
     var p = try parser.Parser.init(allocator, &s.tokens);
     defer p.deinit();
     const ast = try p.parse();
