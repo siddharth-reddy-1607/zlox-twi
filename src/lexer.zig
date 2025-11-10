@@ -17,6 +17,7 @@ pub const TokenType = enum{
     NIL, VAR, TRUE, FALSE,
     AND, OR, IF, ELSE, FOR, WHILE,
     FUN, RETURN, CLASS, THIS, SUPER,
+    PRINT,
 
     EOF
 };
@@ -36,6 +37,7 @@ const keywordMap = std.static_string_map.StaticStringMap(TokenType).initComptime
     .{"class", .CLASS},
     .{"this", .THIS},
     .{"super", .SUPER},
+    .{"print", .PRINT},
 });
 
 pub const Literal = union(enum){

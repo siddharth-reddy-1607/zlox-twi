@@ -12,7 +12,7 @@
     - [ ] Tests
 
 ### Evaluator
-    - [ ] Expressions
+    - [x] Expressions
     - [ ] Graceful Error Handling
     - [ ] Tests
 
@@ -20,3 +20,11 @@
     - [ ] Bitwise
     - [ ] Comma Expression?
     - [ ] Ternary Operator
+
+# What am going to do today?
+- [ ] Print and expression statements
+- [ ] Variable declarations
+    - [ ] Global
+    - [ ] Local (Scope)
+- [ ] Assignment expression 
+- [ ] Synchronizer

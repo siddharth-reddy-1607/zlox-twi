@@ -4,17 +4,26 @@ const lexer = @import("lexer.zig");
 const ParserError = error{
     ExpectedExpression,
     ExpectedClosingBrace,
+    ExpectedSemicolon,
 } || std.mem.Allocator.Error;
 
 //Grammar Precedence
+// Program -> Statemtents* "EOF"
+// Statement -> Print Statement | ExpressionStmt 
+// ExpressionStmt -> Expression ";"
+// PrintStatement -> "print" Expression ";"
 // Expression -> Equality
-// Equality -> Comparison ((== | !=) Comparison)*
-// Comparison -> Term ((<= | < | > | >=) Term)*
-// Term -> Factor ((+ | -) Factor)*
-// Factor -> Unary ((/ | *) Unary)*
-// Unary -> (- | !)Unary | Primary
-// Primary -> (NUMBER | STRING | true | false | nil)
+// Equality -> Comparison (("==" | "!=") Comparison)*
+// Comparison -> Term (("<=" | "<" | ">" | ">=") Term)*
+// Term -> Factor (("+" | "-") Factor)*
+// Factor -> Unary (("/" | "*") Unary)*
+// Unary -> ("-" | "!")Unary | Primary
+// Primary -> (NUMBER | STRING | "true" | "false" | "nil")
 
+pub const Stmt = union(enum){
+    printStmt : *Expr,
+    exprStmt : *Expr,
+};
 //TODO: Make these anon structs with some metaprogramming?
 const unaryStruct  = struct{
     operator : *lexer.Token,
@@ -71,9 +80,33 @@ pub const Parser = struct{
         parentAlloc.destroy(self.arena);
     }
     
-    pub fn parse(self: *Self) !*Expr{
-        //TODO: Handle errors gracefully
-        return try self.expression();
+    pub fn parse(self: *Self) !std.ArrayList(*Stmt){
+        //TODO: Handle errors gracefully, synchronize
+        var statements = std.ArrayList(*Stmt).empty;
+        while (!self.match(&.{.EOF})){
+            const stmt = try self.statement();
+            try statements.append(self.arena.allocator(), stmt);
+        }
+        return statements;
+    }
+
+    fn statement(self: *Self) !*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt); 
+        var expr: *Expr = undefined;
+        if (self.match(&.{.PRINT})){
+            expr = try self.expression(); 
+            if (self.match(&.{.SEMICOLON})){
+               stmt.* = .{.printStmt = expr};
+               return stmt;
+            }
+            return error.ExpectedSemicolon;
+        }
+        expr = try self.expression();
+        if (self.match(&.{.SEMICOLON})){
+            stmt.* = .{.exprStmt = expr};
+            return stmt;
+        }
+        return error.ExpectedSemicolon;
     }
 
     fn expression(self: *Self) !*Expr{
@@ -229,6 +262,7 @@ pub const Parser = struct{
     }
 };
 
+//TODO: Rewrite if necessary to debug AST
 pub fn prettyPrint(expr: *Expr) void{
     switch (expr.*){
         .Literal => |l|{

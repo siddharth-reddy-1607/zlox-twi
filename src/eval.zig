@@ -2,8 +2,6 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const lexer = @import("lexer.zig");
 
-
-
 const Value = union(enum){
     number: f64,
     boolean: bool,
@@ -34,7 +32,21 @@ pub const Evalutor = struct{
         parentAllocator.destroy(self.arena);
     }
 
-    pub fn eval(self: Self, expr: *parser.Expr) !*Value{
+    pub fn eval(self: Self, statements: std.ArrayList(*parser.Stmt)) !void{
+        for (statements.items) |stmt|{
+            switch (stmt.*){
+                .printStmt => |printStmt|{
+                    const val = try self.evalExpression(printStmt);
+                    prettyPrint(val);
+                },
+                .exprStmt => |exprStmt|{
+                    _ = try self.evalExpression(exprStmt);
+                },
+            }
+        }
+    }
+
+    pub fn evalExpression(self: Self, expr: *parser.Expr) !*Value{
        var val : *Value = undefined;
        switch (expr.*){
            .Literal => |l| {
@@ -50,17 +62,17 @@ pub const Evalutor = struct{
                }
            },
            .Binary => |bin|{
-               const leftVal = try self.eval(bin.?.leftOperand);
-               const rightVal = try self.eval(bin.?.rightOperand);
+               const leftVal = try self.evalExpression(bin.?.leftOperand);
+               const rightVal = try self.evalExpression(bin.?.rightOperand);
                try isCompatibleBinaryOperation(leftVal, rightVal, bin.?.operator.type);
                val = try self.binaryOperation(leftVal, rightVal, bin.?.operator.type);
            },
            .Unary => |unary|{
-               const operand = try self.eval(unary.?.operand);
+               const operand = try self.evalExpression(unary.?.operand);
                try isCompatibleUnaryOperation(operand, unary.?.operator.type);
                val = try self.unaryOperation(operand, unary.?.operator.type);
            },
-           .Grouping => |grouping| val = try self.eval(grouping.?),
+           .Grouping => |grouping| val = try self.evalExpression(grouping.?),
        }
        return val;
     }
@@ -237,4 +249,5 @@ pub fn prettyPrint(val: *Value) void{
         .boolean => |b| std.debug.print("{any}", .{b}),
         .nil => std.debug.print("nil", .{}),
     }
+    std.debug.print("\n", .{});
 }
