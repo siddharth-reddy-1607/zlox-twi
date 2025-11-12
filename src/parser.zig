@@ -5,7 +5,9 @@ const ParserError = error{
     ExpectedExpression,
     ExpectedClosingBrace,
     ExpectedSemicolon,
+    ExpectedEqualsTo,
     ExpectedIdentifier,
+    UnsupportedLHS,
 } || std.mem.Allocator.Error;
 
 //Grammar Precedence
@@ -40,6 +42,11 @@ const binaryStruct = struct{
     rightOperand : *Expr,
 };
 
+pub const assignmentStruct = struct{
+    lhs : *Expr,
+    rhs : *Expr,
+}; 
+
 pub const Stmt = union(enum){
     varDecl: *variableDeclStruct,
     printStmt : *Expr,
@@ -64,10 +71,11 @@ pub const Expr = union(enum){
     //     operator : *lexer.Token,
     //     rightOperand : *Expr,
     // },
-    //These don't have to optional
+    //TODO: These don't have to optional
     Unary : ?*unaryStruct,
     Binary : ?*binaryStruct,
     Grouping : ?*Expr,
+    Assignment: *assignmentStruct,
 };
 
 pub const Parser = struct{
@@ -92,7 +100,7 @@ pub const Parser = struct{
         parentAlloc.destroy(self.arena);
     }
     
-    pub fn parse(self: *Self) !std.ArrayList(*Stmt){
+    pub fn parse(self: *Self) ParserError!std.ArrayList(*Stmt){
         //TODO: Handle errors gracefully, synchronize
         var statements = std.ArrayList(*Stmt).empty;
         while (!self.match(&.{.EOF})){
@@ -102,7 +110,7 @@ pub const Parser = struct{
         return statements;
     }
 
-    fn declaration(self: *Self) !*Stmt{
+    fn declaration(self: *Self) ParserError!*Stmt{
         if (self.match(&.{.VAR})){
             if (!self.match(&.{.IDENTIFIER})){
                 return error.ExpectedIdentifier;
@@ -127,7 +135,7 @@ pub const Parser = struct{
         return self.statement();
     }
 
-    fn statement(self: *Self) !*Stmt{
+    fn statement(self: *Self) ParserError!*Stmt{
         const stmt = try self.arena.allocator().create(Stmt); 
         var expr: *Expr = undefined;
         if (self.match(&.{.PRINT})){
@@ -146,11 +154,29 @@ pub const Parser = struct{
         return error.ExpectedSemicolon;
     }
 
-    fn expression(self: *Self) !*Expr{
-        return try self.equality();
+    fn expression(self: *Self) ParserError!*Expr{
+        return try self.assignment();
     }
 
-    fn equality(self: *Self) !*Expr{
+    fn assignment(self: *Self) ParserError!*Expr{
+        const left = try self.equality();
+        if (!self.match(&.{.EQUALS})){
+            return left;
+        }
+        if (std.meta.activeTag(left.*) != .Literal and std.meta.activeTag(left.Literal) != .identifier){
+            return error.UnsupportedLHS;
+        }
+        const right = try self.expression();
+
+        const assignmentExpr = try self.arena.allocator().create(assignmentStruct);
+        assignmentExpr.lhs = left;
+        assignmentExpr.rhs = right;
+        const expr = try self.arena.allocator().create(Expr);
+        expr.* = .{.Assignment = assignmentExpr};
+        return expr;
+    }
+
+    fn equality(self: *Self) ParserError!*Expr{
         var left = try self.comparison();
         while (self.match(&.{.DOUBLE_EQUALS,.BANG_EQUALS})){
             const operator = self.previous();
@@ -186,7 +212,7 @@ pub const Parser = struct{
         return left;
     }
 
-    fn term(self: *Self) !*Expr{
+    fn term(self: *Self) ParserError!*Expr{
         var left = try self.factor();
         while (self.match(&.{.PLUS,.MINUS})){
             const operator = self.previous();
@@ -204,7 +230,7 @@ pub const Parser = struct{
         return left;
     }
 
-    fn factor(self: *Self) !*Expr{
+    fn factor(self: *Self) ParserError!*Expr{
         var left = try self.unary();
         while (self.match(&.{.SLASH,.STAR})){
             const operator = self.previous();
@@ -222,7 +248,7 @@ pub const Parser = struct{
         return left;
     }
 
-    fn unary(self: *Self) !*Expr{
+    fn unary(self: *Self) ParserError!*Expr{
         if (self.match(&.{.MINUS,.BANG})){
             const operator = self.previous();
             const operand = try self.unary();

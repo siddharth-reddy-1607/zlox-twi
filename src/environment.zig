@@ -37,6 +37,11 @@ pub const Environment = struct{
         try self.hashmap.put(identifier, val);
     }
 
+    pub fn assign(self: *Self, identifier: []const u8, val: *eval.Value) !void{
+        _ = self.hashmap.get(identifier) orelse return error.UndefinedVariable;
+        try self.hashmap.put(identifier, val);
+    }
+
     pub fn get(self: Self, identifier: []const u8) !*eval.Value{
         return self.hashmap.get(identifier) orelse EnvironmentError.UndefinedVariable;
     }

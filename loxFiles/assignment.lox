@@ -1,0 +1,10 @@
+var a = "hello";
+var b = "there";
+var c = a + " " + b;
+print a;
+print b;
+print c;
+a = b = c = "I love Zig";
+print a;
+print b;
+print c;

@@ -94,6 +94,10 @@ pub const Evalutor = struct{
                val = try self.unaryOperation(operand, unary.?.operator.type);
            },
            .Grouping => |grouping| val = try self.evalExpression(grouping.?),
+           .Assignment => |ass|{
+                val = try self.evalExpression(ass.rhs);
+                try self.env.assign(ass.lhs.Literal.identifier, val);
+           },
        }
        return val;
     }
