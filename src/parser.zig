@@ -4,6 +4,7 @@ const lexer = @import("lexer.zig");
 const ParserError = error{
     ExpectedExpression,
     ExpectedClosingBrace,
+    ExpectedClosingCurlyBrace,
     ExpectedSemicolon,
     ExpectedEqualsTo,
     ExpectedIdentifier,
@@ -51,6 +52,7 @@ pub const Stmt = union(enum){
     varDecl: *variableDeclStruct,
     printStmt : *Expr,
     exprStmt : *Expr,
+    blockStmt : *std.ArrayList(*Stmt),
 };
 
 pub const Expr = union(enum){
@@ -100,9 +102,10 @@ pub const Parser = struct{
         parentAlloc.destroy(self.arena);
     }
     
-    pub fn parse(self: *Self) ParserError!std.ArrayList(*Stmt){
+    pub fn parse(self: *Self) ParserError!*std.ArrayList(*Stmt){
         //TODO: Handle errors gracefully, synchronize
-        var statements = std.ArrayList(*Stmt).empty;
+        const statements = try self.arena.allocator().create(std.ArrayList(*Stmt));
+        statements.* = std.ArrayList(*Stmt).empty;
         while (!self.match(&.{.EOF})){
             const stmt = try self.declaration();
             try statements.append(self.arena.allocator(), stmt);
@@ -145,6 +148,19 @@ pub const Parser = struct{
                return stmt;
             }
             return error.ExpectedSemicolon;
+        }
+        if (self.match(&.{.LEFT_CURLY_PAREN})){
+            const statements = try self.arena.allocator().create(std.ArrayList(*Stmt));
+            statements.* = std.ArrayList(*Stmt).empty;
+            while (!self.match(&.{.RIGHT_CURLY_PAREN}) and !self.match(&.{.EOF})){
+                const blockStmt = try self.declaration();
+                try statements.append(self.arena.allocator(), blockStmt);
+            }
+            if (self.previous().type != .RIGHT_CURLY_PAREN){
+                return error.ExpectedClosingCurlyBrace;
+            }
+            stmt.* = .{.blockStmt = statements};
+            return stmt;
         }
         expr = try self.expression();
         if (self.match(&.{.SEMICOLON})){

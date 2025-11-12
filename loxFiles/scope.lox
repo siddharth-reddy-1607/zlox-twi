@@ -1,0 +1,12 @@
+var a = "global";
+print a;
+{
+    a = 5;
+    print a;
+    {
+        var a = true;
+        print a;
+    }
+    print a;
+}
+print a;

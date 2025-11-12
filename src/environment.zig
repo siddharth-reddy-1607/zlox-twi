@@ -9,8 +9,9 @@ pub const Environment = struct{
     const Self = @This();
     arena: *std.heap.ArenaAllocator,
     hashmap: *std.StringHashMap(*eval.Value),
+    parentEnv: ?*Environment,
 
-    pub fn init(allocator: std.mem.Allocator) !Environment{
+    pub fn init(allocator: std.mem.Allocator, parentEnv: ?*Environment) !Environment{
         const arena = try allocator.create(std.heap.ArenaAllocator);
         const hashmap = try allocator.create(std.StringHashMap(*eval.Value));
         errdefer {
@@ -21,6 +22,7 @@ pub const Environment = struct{
         return Environment{
             .arena = arena,
             .hashmap = hashmap,
+            .parentEnv = parentEnv,
         };
     }
 
@@ -37,12 +39,20 @@ pub const Environment = struct{
         try self.hashmap.put(identifier, val);
     }
 
-    pub fn assign(self: *Self, identifier: []const u8, val: *eval.Value) !void{
-        _ = self.hashmap.get(identifier) orelse return error.UndefinedVariable;
-        try self.hashmap.put(identifier, val);
+    pub fn assign(self: ?*Self, identifier: []const u8, val: *eval.Value) !void{
+        if (self) |env|{
+            if (env.hashmap.get(identifier)) |_|{
+                try env.hashmap.put(identifier, val);
+                return;
+            }
+            try env.parentEnv.?.assign(identifier, val);
+        }else{
+            return EnvironmentError.UndefinedVariable;
+        }
     }
 
-    pub fn get(self: Self, identifier: []const u8) !*eval.Value{
-        return self.hashmap.get(identifier) orelse EnvironmentError.UndefinedVariable;
+    pub fn get(self: ?Self, identifier: []const u8) !*eval.Value{
+        if (self == null) return EnvironmentError.UndefinedVariable;
+        return self.?.hashmap.get(identifier) orelse self.?.parentEnv.?.get(identifier);
     }
 };

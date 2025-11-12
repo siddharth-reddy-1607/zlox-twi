@@ -20,17 +20,17 @@ pub fn main() !void {
 }
 
 fn runFile(allocator: std.mem.Allocator, filePath: []const u8) !void{
-    const evaluator = try eval.Evalutor.init(allocator);
+    var evaluator = try eval.Evalutor.init(allocator);
     defer evaluator.deinit();
 
     const cwd = std.fs.cwd();
     const source = try cwd.readFileAlloc(allocator, filePath, std.math.maxInt(usize));
     defer allocator.free(source);
-    try run(source, allocator, evaluator);
+    try run(source, allocator, &evaluator);
 }
 
 fn runREPL(allocator: std.mem.Allocator) !void{
-    const evaluator = try eval.Evalutor.init(allocator);
+    var evaluator = try eval.Evalutor.init(allocator);
     defer evaluator.deinit();
 
     var readBuffer : [1024]u8 = undefined;
@@ -43,7 +43,7 @@ fn runREPL(allocator: std.mem.Allocator) !void{
     std.debug.print("> ",.{});
     while (stdinIoReader.streamDelimiter(&allocatingWriter.writer, '\n')) |_|{
         const source = allocatingWriter.written();
-        try run(source, allocator, evaluator);
+        try run(source, allocator, &evaluator);
         allocatingWriter.clearRetainingCapacity();
         stdinIoReader.toss(1);
         std.debug.print("\n> ",.{});
@@ -58,7 +58,7 @@ fn runREPL(allocator: std.mem.Allocator) !void{
     }
 }
 
-fn run(source: []u8, allocator: std.mem.Allocator, evaluator: eval.Evalutor) !void{
+fn run(source: []u8, allocator: std.mem.Allocator, evaluator: *eval.Evalutor) !void{
     var s = try lexer.Scanner.init(allocator);
     defer s.deinit();
     try s.scan(source);

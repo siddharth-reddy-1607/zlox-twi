@@ -25,7 +25,7 @@ pub const Evalutor = struct{
        errdefer(allocator.destroy(arena));
        errdefer(allocator.destroy(env));
        arena.* = std.heap.ArenaAllocator.init(allocator);
-       env.* = try environment.Environment.init(allocator);
+       env.* = try environment.Environment.init(allocator, null);
        return Evalutor{
            .arena = arena,
            .env = env,
@@ -40,7 +40,7 @@ pub const Evalutor = struct{
         parentAllocator.destroy(self.env);
     }
 
-    pub fn eval(self: Self, statements: std.ArrayList(*parser.Stmt)) !void{
+    pub fn eval(self: *Self, statements: *std.ArrayList(*parser.Stmt)) !void{
         for (statements.items) |stmt|{
             switch (stmt.*){
                 .varDecl => |varDecl|{
@@ -55,6 +55,14 @@ pub const Evalutor = struct{
                 .printStmt => |printStmt|{
                     const val = try self.evalExpression(printStmt);
                     prettyPrint(val);
+                },
+                .blockStmt => |blockStmt|{
+                    const prev = self.env;
+                    const blockEnv = try self.arena.allocator().create(environment.Environment);
+                    blockEnv.* = try environment.Environment.init(self.arena.allocator(), prev);
+                    self.env = blockEnv;
+                    try self.eval(blockStmt);
+                    self.env = prev;
                 },
                 .exprStmt => |exprStmt|{
                     _ = try self.evalExpression(exprStmt);
