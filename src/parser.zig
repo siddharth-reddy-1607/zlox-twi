@@ -21,7 +21,7 @@ const ParserError = error{
 // ExpressionStmt -> Expression ";"
 // BlockStmt -> { Statement* }
 // ifStatemtn -> "if" "(" expression ")" Statement ("else" Statement)
-// loopStatement -> ("while" "(" expression ") Statement) | ("for" "(" (VariableDeclaration|expression)? ";" (expression)? ";" (expression)? ") Statement)
+// loopStatement -> ("while" "(" expression ") Statement) | ("for" "(" (VariableDeclaration|expressionStatement|";") (expression)? ";" (expression)? ") Statement)
 // Expression -> Assignment
 // Assignment -> IDENTIFIER = Logical_Or
 // Logical_Or -> Logical_And ("or" Logical_And)?
@@ -136,41 +136,48 @@ pub const Parser = struct{
 
     fn declaration(self: *Self) ParserError!*Stmt{
         if (self.match(&.{.VAR})){
-            if (!self.match(&.{.IDENTIFIER})){
-                return error.ExpectedIdentifier;
-            }
-            const identifer = self.previous().lexeme;
-            var expr :?*Expr = null;
-
-            const stmt = try self.arena.allocator().create(Stmt);
-            const variable = try self.arena.allocator().create(variableDeclStruct);
-            variable.name = identifer;
-
-            if (self.match(&.{.EQUALS})){
-                expr = try self.expression();
-            }
-            variable.expr = expr;
-            stmt.* = .{.varDecl = variable};
-            if (!self.match(&.{.SEMICOLON})){
-                return error.ExpectedSemicolon;
-            }
-            return stmt;
+            return self.variableDecl();
         }
         return self.statement();
     }
 
+    fn variableDecl(self: *Self) ParserError!*Stmt{
+        if (!self.match(&.{.IDENTIFIER})){
+            return error.ExpectedIdentifier;
+        }
+        const identifer = self.previous().lexeme;
+        var expr :?*Expr = null;
+
+        const stmt = try self.arena.allocator().create(Stmt);
+        const variable = try self.arena.allocator().create(variableDeclStruct);
+        variable.name = identifer;
+
+        if (self.match(&.{.EQUALS})){
+            expr = try self.expression();
+        }
+        variable.expr = expr;
+        stmt.* = .{.varDecl = variable};
+        if (!self.match(&.{.SEMICOLON})){
+            return error.ExpectedSemicolon;
+        }
+        return stmt;
+    }
+
     fn statement(self: *Self) ParserError!*Stmt{
         if (self.match(&.{.PRINT})){
-            return try self.printStatement();
+            return self.printStatement();
         }
         if (self.match(&.{.LEFT_CURLY_PAREN})){
-            return try self.blockStatement();
+            return self.blockStatement();
         }
         if (self.match(&.{.IF})){
-            return try self.ifStatement();
+            return self.ifStatement();
         }
         if (self.match(&.{.WHILE})){
-            return try self.whileStatement();
+            return self.whileStatement();
+        }
+        if (self.match(&.{.FOR})){
+            return self.forStatement();
         }
         return try self.expressionStatement();
     }
@@ -251,6 +258,67 @@ pub const Parser = struct{
             .condition = conditon,
         };
         stmt.* = .{.loopStmt = loopStatement};
+        return stmt;
+    }
+
+    fn forStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt);
+        if (!self.match(&.{.LEFT_PAREN})){
+            return error.ExpectedOpeningBrace;
+        }
+        var initializer : ?*Stmt = null;
+        if (self.match(&.{.VAR})){
+            initializer = try self.variableDecl();
+        }else if (self.peek().type != .SEMICOLON){
+            initializer = try self.expressionStatement();
+        }else if (!self.match(&.{.SEMICOLON})){
+            return error.ExpectedSemicolon;
+        }
+        var conditon : ?*Expr = null;
+        if (self.peek().type != .SEMICOLON){
+            conditon = try self.expression();
+        }else{
+            const expr = try self.arena.allocator().create(Expr);
+            expr.* = .{.Literal = .{.true = true}};
+            conditon = expr;
+        }
+        if (!self.match(&.{.SEMICOLON})){
+            return error.ExpectedSemicolon;
+        }
+        var increment : ?*Expr  = null;
+        if (self.peek().type != .RIGHT_PAREN){
+            increment = try self.expression();
+        }
+        if (!self.match(&.{.RIGHT_PAREN})){
+            return error.ExpectedClosingBrace;
+        }
+
+        const bodyBlock = try self.arena.allocator().create(std.ArrayList(*Stmt));
+        bodyBlock.* = std.ArrayList(*Stmt).empty;
+        const body = try self.statement();
+        try bodyBlock.append(self.arena.allocator(), body);
+        if (increment) |inc|{
+            const incStmt = try self.arena.allocator().create(Stmt);
+            incStmt.* = .{.exprStmt = inc};
+            try bodyBlock.append(self.arena.allocator(), incStmt);
+        }
+        const bodyBlockStmt = try self.arena.allocator().create(Stmt);
+        bodyBlockStmt.* = .{.blockStmt = bodyBlock};
+        const loop = try self.arena.allocator().create(loopStatementStruct);
+        loop.* = loopStatementStruct{
+            .body = bodyBlockStmt,
+            .condition = conditon orelse unreachable,
+        };
+        const loopStatement = try self.arena.allocator().create(Stmt);
+        loopStatement.* = .{.loopStmt = loop};
+
+        const forBlock = try self.arena.allocator().create(std.ArrayList(*Stmt));
+        forBlock.* = std.ArrayList(*Stmt).empty;
+        if (initializer) |forInit|{
+            try forBlock.append(self.arena.allocator(),forInit);
+        }
+        try forBlock.append(self.arena.allocator(), loopStatement);
+        stmt.* = .{.blockStmt =  forBlock};
         return stmt;
     }
 
