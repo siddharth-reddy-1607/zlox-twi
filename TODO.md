@@ -1,30 +1,15 @@
 ### Generic
-[x] [Fix Arena Allocator bug?](https://www.openmymind.net/Be-Careful-When-Assigning-ArenaAllocators/)
-
-### Lexer
-    - [x] Implementation
-    - [ ] Graceful Error Handling
-    - [ ] Tests
-
-### Parser
-    - [x] Expressions
-    - [ ] Graceful Error Handling
-    - [ ] Tests
-
-### Evaluator
-    - [x] Expressions
-    - [ ] Graceful Error Handling
-    - [ ] Tests
+- [x] [Fix Arena Allocator bug?](https://www.openmymind.net/Be-Careful-When-Assigning-ArenaAllocators/)
+- [ ] Error Recovery
+- [ ] Graceful Error Handling
 
 ### Additional Features
     - [ ] Bitwise
     - [ ] Comma Expression?
     - [ ] Ternary Operator
-
-# What am going to do today?
-- [ ] Print and expression statements
-- [ ] Variable declarations
-    - [ ] Global
-    - [ ] Local (Scope)
-- [ ] Assignment expression 
-- [ ] Synchronizer
+    - [ ] Break/Continue
+    - [ ] += -= /= *= and %
+    - [ ] ++ --
+    - [ ] Allow expression in REPL
+    - [ ] Do I want variable Shadowing???
+    - [ ] print should allow printing multiple values seperated by commas.(Add formatting later?)
