@@ -1,0 +1,15 @@
+print 5 == 5 and "sid" == "sid";
+
+var lang = "zig";
+if (lang != "zig" or lang != "rust" or lang != "c") print "Please use a real language"; 
+else print "Good choice";
+
+var a = 10;
+var b = 5;
+var c = 6;
+
+if (a < b and a < c) print "a in minumum";
+if (b < c and b < a) print "b in minumum";
+if (c < b and b < c) print "b in minumum";
+
+if (b > 10 and b < 20 or b == 5) print "b good";

@@ -1,0 +1,19 @@
+var a = 0;
+while (a < 10){
+    print a;
+    a = a + 1;
+}
+
+print "---Fib---";
+var a = 0;
+var b = 1;
+print a;
+print b;
+var count = 20;
+while (count > 0){
+    var c = a + b;
+    a = b;
+    b = c;
+    print c;
+    count = count - 1;
+}
