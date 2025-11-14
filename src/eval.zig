@@ -88,6 +88,16 @@ pub const Evalutor = struct{
                     }
                 }
             },
+            .loopStmt => |loopStmt|{
+                var condition = try self.evalExpression(loopStmt.condition);
+                if (!condition.match(.boolean)){
+                    return error.ConditionMustBeBoolean;
+                }
+                while (condition.boolean){
+                    try self.execute(loopStmt.body);
+                    condition = try self.evalExpression(loopStmt.condition);
+                }
+            },
             .exprStmt => |exprStmt|{
                 _ = try self.evalExpression(exprStmt);
             },

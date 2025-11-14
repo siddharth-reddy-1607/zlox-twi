@@ -16,11 +16,12 @@ const ParserError = error{
 // Program -> Declrations* EOF
 // Declaration -> VariableDeclaration | Statement;//This is just to distinguish between places that accept variable declarations and that don't. And if statement without scope for example can't have variable declaration
 // VariableDeclaration -> var IDENTIFIER ("=" expression)? ";"
-// Statement -> Print Statement | ExpressionStmt | BlockStmt | ifStatement
+// Statement -> Print Statement | ExpressionStmt | BlockStmt | ifStatement | loopStatement
 // PrintStatement -> "print" Expression ";"
 // ExpressionStmt -> Expression ";"
 // BlockStmt -> { Statement* }
 // ifStatemtn -> "if" "(" expression ")" Statement ("else" Statement)
+// loopStatement -> ("while" "(" expression ") Statement) | ("for" "(" (VariableDeclaration|expression)? ";" (expression)? ";" (expression)? ") Statement)
 // Expression -> Assignment
 // Assignment -> IDENTIFIER = Logical_Or
 // Logical_Or -> Logical_And ("or" Logical_And)?
@@ -60,12 +61,18 @@ pub const ifStatementStruct = struct{
     elseBlock : ?*Stmt,
 };
 
+pub const loopStatementStruct = struct{
+    condition : *Expr,
+    body : *Stmt,
+};
+
 pub const Stmt = union(enum){
     varDecl : *variableDeclStruct,
     printStmt : *Expr,
     exprStmt : *Expr,
     blockStmt : *std.ArrayList(*Stmt),
     ifStmt : *ifStatementStruct,
+    loopStmt : *loopStatementStruct,
 };
 
 pub const Expr = union(enum){
@@ -162,6 +169,9 @@ pub const Parser = struct{
         if (self.match(&.{.IF})){
             return try self.ifStatement();
         }
+        if (self.match(&.{.WHILE})){
+            return try self.whileStatement();
+        }
         return try self.expressionStatement();
     }
 
@@ -222,6 +232,25 @@ pub const Parser = struct{
             .elseBlock = elseClause,
         };
         stmt.* = .{.ifStmt = ifStruct};
+        return stmt;
+    }
+
+    fn whileStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt);
+        if (!self.match(&.{.LEFT_PAREN})){
+            return error.ExpectedOpeningBrace;
+        }
+        const conditon = try self.expression();
+        if (!self.match(&.{.RIGHT_PAREN})){
+            return error.ExpectedClosingBrace;
+        }
+        const body = try self.statement();
+        const loopStatement = try self.arena.allocator().create(loopStatementStruct);
+        loopStatement.* = loopStatementStruct{
+            .body = body,
+            .condition = conditon,
+        };
+        stmt.* = .{.loopStmt = loopStatement};
         return stmt;
     }
 
