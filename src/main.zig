@@ -68,8 +68,8 @@ fn run(source: []u8, allocator: std.mem.Allocator, evaluator: *eval.Evalutor) !v
     // std.debug.print("\n",.{});
     var p = try parser.Parser.init(allocator, &s.tokens);
     defer p.deinit();
-    const ast = try p.parse();
+    const statements = try p.parse();
     // parser.prettyPrint(ast);
     // std.debug.print("\n",.{});
-    try evaluator.eval(ast);
+    try evaluator.executeStatements(statements);
 }

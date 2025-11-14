@@ -3,6 +3,12 @@ const parser = @import("parser.zig");
 const lexer = @import("lexer.zig");
 const environment = @import("environment.zig");
 
+const ParserError = error{
+    OperandTypeMismatchError,
+    ConditionMustBeBoolean,
+    DivisionByZero,
+} || environment.EnvironmentError;
+
 pub const Value = union(enum){
     number: f64,
     boolean: bool,
@@ -40,34 +46,51 @@ pub const Evalutor = struct{
         parentAllocator.destroy(self.env);
     }
 
-    pub fn eval(self: *Self, statements: *std.ArrayList(*parser.Stmt)) !void{
+    pub fn executeStatements(self: *Self, statements: *std.ArrayList(*parser.Stmt)) ParserError!void{
         for (statements.items) |stmt|{
-            switch (stmt.*){
-                .varDecl => |varDecl|{
-                    var val = try self.arena.allocator().create(Value);
-                    if (varDecl.expr) |expr|{
-                        val = try self.evalExpression(expr);
-                    }else{
-                        val.* = .{.nil = null};
+            try self.execute(stmt);
+        }
+    }
+
+    pub fn execute(self: *Self, statement: *parser.Stmt) ParserError!void{
+        switch (statement.*){
+            .varDecl => |varDecl|{
+                var val = try self.arena.allocator().create(Value);
+                if (varDecl.expr) |expr|{
+                    val = try self.evalExpression(expr);
+                }else{
+                    val.* = .{.nil = null};
+                }
+                try self.env.create(varDecl.name, val);
+            },
+            .printStmt => |printStmt|{
+                const val = try self.evalExpression(printStmt);
+                prettyPrint(val);
+            },
+            .blockStmt => |blockStmt|{
+                const prev = self.env;
+                const blockEnv = try self.arena.allocator().create(environment.Environment);
+                blockEnv.* = try environment.Environment.init(self.arena.allocator(), prev);
+                self.env = blockEnv;
+                try self.executeStatements(blockStmt);
+                self.env = prev;
+            },
+            .ifStmt => |ifStmt|{
+                const condition = try self.evalExpression(ifStmt.condition);
+                if (!condition.match(.boolean)){
+                    return error.ConditionMustBeBoolean;
+                }
+                if (condition.boolean){
+                    try self.execute(ifStmt.thenBlock);
+                }else{
+                    if (ifStmt.elseBlock) |elseBlock|{
+                        try self.execute(elseBlock);
                     }
-                    try self.env.create(varDecl.name, val);
-                },
-                .printStmt => |printStmt|{
-                    const val = try self.evalExpression(printStmt);
-                    prettyPrint(val);
-                },
-                .blockStmt => |blockStmt|{
-                    const prev = self.env;
-                    const blockEnv = try self.arena.allocator().create(environment.Environment);
-                    blockEnv.* = try environment.Environment.init(self.arena.allocator(), prev);
-                    self.env = blockEnv;
-                    try self.eval(blockStmt);
-                    self.env = prev;
-                },
-                .exprStmt => |exprStmt|{
-                    _ = try self.evalExpression(exprStmt);
-                },
-            }
+                }
+            },
+            .exprStmt => |exprStmt|{
+                _ = try self.evalExpression(exprStmt);
+            },
         }
     }
 
@@ -227,7 +250,8 @@ pub const Evalutor = struct{
                     .string => {
                         const lStr = leftVal.*.string;
                         const rStr = rightVal.*.string;
-                        val.* = .{.boolean = std.mem.eql(u8, lStr, rStr)};
+                        const res = std.mem.eql(u8, lStr, rStr);
+                        val.* = .{.boolean = if (eq == .DOUBLE_EQUALS) res else !res};
                     },
                     .number => {
                         const lNum = leftVal.*.number;

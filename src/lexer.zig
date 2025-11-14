@@ -110,7 +110,7 @@ pub const Scanner = struct{
                 ';' =>  try self.addToken(.SEMICOLON),
                 '/' => {
                     if (self.match('/') orelse false){
-                        while (self.peek() orelse null != '\n'){
+                        while (self.peek() orelse null != '\n' and !self.isAtEnd()){
                             _ = self.advance();
                         }
                     }else{
@@ -177,11 +177,13 @@ pub const Scanner = struct{
     }
 
     fn addString(self: *Self) !void{
-        while (self.peek() orelse null != '"'){
+        while (self.peek() orelse null != '"' and !self.isAtEnd()){
             self.line += if (self.peek() orelse null == '\n') 1 else 0;
             _ = self.advance();
         }
-        //TODO: Handle unterminated string
+        if (self.peek() orelse null != '"'){
+            return error.UnterimnatedString;
+        }
         _ = self.advance(); //Consume the closing double qoutes
         try self.addToken(.STRING);
     }

@@ -1,7 +1,7 @@
 const std = @import("std");
 const eval = @import("eval.zig");
 
-const EnvironmentError = error{
+pub const EnvironmentError = error{
     UndefinedVariable,
 } || std.mem.Allocator.Error;
 

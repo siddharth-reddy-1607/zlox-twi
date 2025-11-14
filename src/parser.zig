@@ -3,6 +3,7 @@ const lexer = @import("lexer.zig");
 
 const ParserError = error{
     ExpectedExpression,
+    ExpectedOpeningBrace,
     ExpectedClosingBrace,
     ExpectedClosingCurlyBrace,
     ExpectedSemicolon,
@@ -48,11 +49,18 @@ pub const assignmentStruct = struct{
     rhs : *Expr,
 }; 
 
+pub const ifStatementStruct = struct{
+    condition : *Expr,
+    thenBlock : *Stmt,
+    elseBlock : ?*Stmt,
+};
+
 pub const Stmt = union(enum){
-    varDecl: *variableDeclStruct,
+    varDecl : *variableDeclStruct,
     printStmt : *Expr,
     exprStmt : *Expr,
     blockStmt : *std.ArrayList(*Stmt),
+    ifStmt : *ifStatementStruct,
 };
 
 pub const Expr = union(enum){
@@ -139,35 +147,76 @@ pub const Parser = struct{
     }
 
     fn statement(self: *Self) ParserError!*Stmt{
-        const stmt = try self.arena.allocator().create(Stmt); 
-        var expr: *Expr = undefined;
         if (self.match(&.{.PRINT})){
-            expr = try self.expression(); 
-            if (self.match(&.{.SEMICOLON})){
-               stmt.* = .{.printStmt = expr};
-               return stmt;
-            }
-            return error.ExpectedSemicolon;
+            return try self.printStatement();
         }
         if (self.match(&.{.LEFT_CURLY_PAREN})){
-            const statements = try self.arena.allocator().create(std.ArrayList(*Stmt));
-            statements.* = std.ArrayList(*Stmt).empty;
-            while (!self.match(&.{.RIGHT_CURLY_PAREN}) and !self.match(&.{.EOF})){
-                const blockStmt = try self.declaration();
-                try statements.append(self.arena.allocator(), blockStmt);
-            }
-            if (self.previous().type != .RIGHT_CURLY_PAREN){
-                return error.ExpectedClosingCurlyBrace;
-            }
-            stmt.* = .{.blockStmt = statements};
-            return stmt;
+            return try self.blockStatement();
         }
-        expr = try self.expression();
-        if (self.match(&.{.SEMICOLON})){
-            stmt.* = .{.exprStmt = expr};
-            return stmt;
+        if (self.match(&.{.IF})){
+            return try self.ifStatement();
         }
-        return error.ExpectedSemicolon;
+        return try self.expressionStatement();
+    }
+
+    fn printStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt); 
+        var expr: *Expr = undefined;
+        expr = try self.expression(); 
+        if (!self.match(&.{.SEMICOLON})){
+            return error.ExpectedSemicolon;
+        }
+        stmt.* = .{.printStmt = expr};
+        return stmt;
+    } 
+
+    fn expressionStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt); 
+        const expr = try self.expression();
+        if (!self.match(&.{.SEMICOLON})){
+            return error.ExpectedSemicolon;
+        }
+        stmt.* = .{.exprStmt = expr};
+        return stmt;
+    }
+
+    fn blockStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt); 
+        const statements = try self.arena.allocator().create(std.ArrayList(*Stmt));
+        statements.* = std.ArrayList(*Stmt).empty;
+        while (!self.match(&.{.RIGHT_CURLY_PAREN}) and !self.match(&.{.EOF})){
+            const blockStmt = try self.declaration();
+            try statements.append(self.arena.allocator(), blockStmt);
+        }
+        if (self.previous().type != .RIGHT_CURLY_PAREN){
+            return error.ExpectedClosingCurlyBrace;
+        }
+        stmt.* = .{.blockStmt = statements};
+        return stmt;
+    }
+
+    fn ifStatement(self: *Self) ParserError!*Stmt{
+        const stmt = try self.arena.allocator().create(Stmt); 
+        if (!self.match(&.{.LEFT_PAREN})){
+            return error.ExpectedOpeningBrace;
+        }
+        const condition = try self.expression();
+        if (!self.match(&.{.RIGHT_PAREN})){
+            return error.ExpectedClosingBrace;
+        }
+        const thenClause : *Stmt = try self.statement();
+        var elseClause : ?*Stmt = null;
+        if (self.match(&.{.ELSE})){
+            elseClause = try self.statement();
+        }
+        const ifStruct = try self.arena.allocator().create(ifStatementStruct);
+        ifStruct.* = ifStatementStruct{
+            .condition = condition,
+            .thenBlock = thenClause,
+            .elseBlock = elseClause,
+        };
+        stmt.* = .{.ifStmt = ifStruct};
+        return stmt;
     }
 
     fn expression(self: *Self) ParserError!*Expr{

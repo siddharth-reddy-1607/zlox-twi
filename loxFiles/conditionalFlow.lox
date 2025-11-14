@@ -1,0 +1,24 @@
+var a = 5;
+
+if (a < 5) print "Less than 5";
+else print "Greater Equals 5";
+
+var lang = "python";
+print lang != "zig";
+if (lang != "zig"){
+    print "Use a real language";
+    lang = "zig";
+}
+print lang;
+
+a = "hello ";
+
+if (a == "hello"){
+    print a + " world from else";
+    a = "goodbye";
+}else{
+    print a + "world from else";
+    a = "goodbye";
+}
+print a;
+
