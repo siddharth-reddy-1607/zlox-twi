@@ -16,10 +16,15 @@ const ParserError = error{
 // Program -> Declrations* EOF
 // Declaration -> VariableDeclaration | Statement;//This is just to distinguish between places that accept variable declarations and that don't. And if statement without scope for example can't have variable declaration
 // VariableDeclaration -> var IDENTIFIER ("=" expression)? ";"
-// Statement -> Print Statement | ExpressionStmt 
-// ExpressionStmt -> Expression ";"
+// Statement -> Print Statement | ExpressionStmt | BlockStmt | ifStatement
 // PrintStatement -> "print" Expression ";"
-// Expression -> Equality
+// ExpressionStmt -> Expression ";"
+// BlockStmt -> { Statement* }
+// ifStatemtn -> "if" "(" expression ")" Statement ("else" Statement)
+// Expression -> Assignment
+// Assignment -> IDENTIFIER = Logical_Or
+// Logical_Or -> Logical_And ("or" Logical_And)?
+// Logical_And -> Equality ("and" Equality)?
 // Equality -> Comparison (("==" | "!=") Comparison)*
 // Comparison -> Term (("<=" | "<" | ">" | ">=") Term)*
 // Term -> Factor (("+" | "-") Factor)*
@@ -86,6 +91,7 @@ pub const Expr = union(enum){
     Binary : ?*binaryStruct,
     Grouping : ?*Expr,
     Assignment: *assignmentStruct,
+    Condtional : *binaryStruct,
 };
 
 pub const Parser = struct{
@@ -224,7 +230,7 @@ pub const Parser = struct{
     }
 
     fn assignment(self: *Self) ParserError!*Expr{
-        const left = try self.equality();
+        const left = try self.logical_or();
         if (!self.match(&.{.EQUALS})){
             return left;
         }
@@ -239,6 +245,42 @@ pub const Parser = struct{
         const expr = try self.arena.allocator().create(Expr);
         expr.* = .{.Assignment = assignmentExpr};
         return expr;
+    }
+
+    fn logical_or(self: *Self) ParserError!*Expr{
+        var left = try self.logical_and();
+        while (self.match(&.{.OR})){
+            const operator = self.previous();
+            const right = try self.logical_and();
+            const binExpr = try self.arena.allocator().create(binaryStruct);
+            binExpr.* = .{
+                .leftOperand = left,
+                .operator = operator,
+                .rightOperand = right,
+            };
+            const expr = try self.arena.allocator().create(Expr);
+            expr.* = .{.Condtional = binExpr};
+            left = expr;
+        }
+        return left;
+    }
+
+    fn logical_and(self: *Self) ParserError!*Expr{
+        var left = try self.equality();
+        while (self.match(&.{.AND})){
+            const operator = self.previous();
+            const right = try self.logical_and();
+            const binExpr = try self.arena.allocator().create(binaryStruct);
+            binExpr.* = .{
+                .leftOperand = left,
+                .operator = operator,
+                .rightOperand = right,
+            };
+            const expr = try self.arena.allocator().create(Expr);
+            expr.* = .{.Condtional = binExpr};
+            left = expr;
+        }
+        return left;
     }
 
     fn equality(self: *Self) ParserError!*Expr{

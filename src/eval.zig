@@ -119,6 +119,38 @@ pub const Evalutor = struct{
                try isCompatibleBinaryOperation(leftVal, rightVal, bin.?.operator.type);
                val = try self.binaryOperation(leftVal, rightVal, bin.?.operator.type);
            },
+           .Condtional => |con|{
+               val = try self.arena.allocator().create(Value);
+               const leftVal = try self.evalExpression(con.leftOperand);
+               if (!leftVal.match(.boolean)){
+                   return error.ConditionMustBeBoolean;
+               }
+               switch (con.operator.type){
+                   .OR => {
+                       if (leftVal.boolean == true){
+                           val = leftVal;
+                       }else{
+                           const rightVal = try self.evalExpression(con.rightOperand);
+                           if (!rightVal.match(.boolean)){
+                               return error.ConditionMustBeBoolean;
+                           }
+                           val = rightVal;
+                       }
+                   },
+                   .AND => {
+                       if (leftVal.boolean == false){
+                           val = leftVal;
+                       }else{
+                           const rightVal = try self.evalExpression(con.rightOperand);
+                           if (!rightVal.match(.boolean)){
+                               return error.ConditionMustBeBoolean;
+                           }
+                           val = rightVal;
+                       }
+                   },
+                   else => unreachable,
+               }
+           },
            .Unary => |unary|{
                const operand = try self.evalExpression(unary.?.operand);
                try isCompatibleUnaryOperation(operand, unary.?.operator.type);

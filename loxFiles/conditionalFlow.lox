@@ -22,3 +22,10 @@ if (a == "hello"){
 }
 print a;
 
+var a = 10;
+var b = 5;
+var c = 6;
+
+if (a < b) if (c < a) print "c in minimum"; else print "a is minumum";
+if (b < a) if (c < b) print "c in minimum"; else print "b is minumum";
+if (c < b) if (a < c) print "a in minimum"; else print "c is minumum";
